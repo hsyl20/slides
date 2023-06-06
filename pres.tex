@@ -13,6 +13,13 @@
     pdfpagemode=FullScreen,
     }
 
+\lstset{
+  showstringspaces=false,
+  stringstyle=\ttfamily\color{red},
+  commentstyle=\ttfamily,
+  keywordstyle=
+}
+
 \AtBeginSection[]
 {
   \begin{frame}
@@ -108,15 +115,15 @@
 \begin{itemize}
 \item It has its own Runtime System written in JavaScript
 \item It’s the first GHC backend to target a managed platform
-\item JavaScript is easier to hack to observe
-\item GHCJS already proved that JS can be used in production
+\item JavaScript is easier to hack and to observe
+\item GHCJS already proved that JavaScript can be used in production
 \end{itemize}
 \end{itemize}
 \end{frame}
 
 
 \begin{frame}
-\frametitle{JS backend: a different RTS written in JS}
+\frametitle{JS backend: a different RTS written in JavaScript}
 
 \begin{columns}
 
@@ -207,13 +214,20 @@ Wasm backend & C (compiled to Wasm) \\ \hline
 
 
 \begin{frame}
-\frametitle{Demo: SumOfInt64}
+\frametitle{Demo: SumInt64}
 \begin{itemize}
 \item Show sources
 \item Build
 \item Present artefacts
 \item Load in Chromium perf debugger
 \item Load in Firefox perf debugger
+\item Primops
+  \begin{itemize}
+    \item subInt64\# in STG
+    \item primops.txt.pp: Int64SubOp
+    \item GHC.StgToJS.Prim: Int64SubOp
+    \item rts/js/arith.js: h\$hs\_minusInt64
+  \end{itemize}
 \end{itemize}
 \end{frame}
 
@@ -285,12 +299,13 @@ GHCJS’ maintainers
 \item Luite Stegeman (2012-2021)
 \end{itemize}
 
-JS backend’s maintainers (IOG team)
+JS backend’s maintainers
 \begin{itemize}
 \item Jeffrey Young
 \item Josh Meredith
 \item Luite Stegeman
 \item Sylvain Henry
+\item \textit{Add your name here}
 \end{itemize}
 \end{column}
 
@@ -503,7 +518,7 @@ foreign import javascript
     "((x) => { console.log(x); })"
     js_log :: Int# -> IO ()
 
--- interruptible convention: explicit continuation
+-- interruptible: explicit continuation
 foreign import javascript interruptible
     "((x,c) => { c(x + 123); })"
     js_foo :: Int# -> Int#
@@ -562,7 +577,7 @@ foreign import javascript
   \frametitle{How to implement a new GHC backend: code overview}
   \begin{itemize}
 \item Declare platform: ghc-boot:GHC.Platform.ArchOS
-\item Fix build system: config.sub, hadrian, cabal (js-sources),
+\item Fix build system: config.sub, hadrian, Cabal (js-sources),
   utils/deriveConstants
 \item Add compilation pipeline: GHC.StgToJS.CodeGen and its deps
 \item Add FFI support: GHC.HsToCore.Foreign.JavaScript
@@ -574,8 +589,8 @@ foreign import javascript
 \item Add linker support: GHC.StgToJS.Linker
 \item Add runtime system (RTS) or reuse existing one: rts/js/*
 \item Add interpreter (for Template Haskell): GHC.Runtime.Interpreter.JS and
-  js-interp.js
-\item Hook all this into the compiler driver: GHC.Driver.Backend, etc.
+  \texttt{js-interp.js}
+\item Hook all this into the compiler driver: GHC.Driver.Backend
 \end{itemize}
 \end{frame}
 
@@ -635,6 +650,11 @@ foreign import javascript
   \hspace{1cm}
   \begin{itemize}
     \item Demo: Prim
+      \begin{itemize}
+        \item \texttt{bar} returning primitive values
+        \item 2 mallocs with same "address" result
+        \item JS dump
+      \end{itemize}
   \end{itemize}
 \end{frame}
 
@@ -642,9 +662,91 @@ foreign import javascript
 \begin{frame}
 \frametitle{Scheduler}
   \begin{itemize}
-    \item 
+    \item STG machine usually implemented with tail calls / goto
+      \begin{itemize}
+        \item JS engines don't support tail calls
+        \item Using normal calls to implement tail calls would blow the JS call
+          stack
+      \end{itemize}
+
+    \item What the JS backend does:
+      \begin{itemize}
+        \item Haskell functions are represented as 0-argument functions
+          \begin{itemize}
+            \item Arguments are passed via global variables
+          \end{itemize}
+        \item They \alert{return} their own continuation
+        \item Trampoline in the scheduler: \texttt{while(true) \{ c = c(); \}}
+      \end{itemize}
+    \item Demo:
+      \begin{itemize}
+        \item show rts/js/thread.js runThreadSlice
+        \item "Fun" demo
+        \item add \texttt{h\$log(c)}
+        \item add \texttt{if (c.toString().match("main"))}
+      \end{itemize}
   \end{itemize}
 \end{frame}
 
+\begin{frame}
+\frametitle{Template Haskell interpreter}
+  \begin{itemize}
+    \item GHCJS pioneered the “external interpreter” idea
+      \begin{itemize}
+        \item Now we can reuse the upstream one!
+      \end{itemize}
+    \item Overview
+      \begin{itemize}
+    \item Execute js-interp.hs in Node.js
+    \item Communicate via Unix pipes with it
+    \item Can send compiled Haskell code to load and to execute
+    \item First send the external interpreter code
+    \item Then send TH splices and their dependencies
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\section{Conclusion}
+
+\begin{frame}
+\frametitle{Contribution ideas}
+  \begin{itemize}
+   \item Build cool stuff with it and report/fix the issues you face!
+   \item Help updating the GHCJS ecosystem and other libs (C sources...)
+   \item Profile generated code and fix performance issues
+    \begin{itemize}
+   \item E.g. replace use of BigInt from numerical primop implementation
+    \end{itemize}
+   \item Help with any other item on the roadmap
+     \begin{itemize}
+   \item Fix skipped tests in the testsuite (grep "js\_broken")
+   \item Profile GHC using the JS backend and optimize it
+   \item (Re)implement support for profiling (cost centers...)
+   \item Add JS code optimizations
+   \item Fix \href{https://gitlab.haskell.org/ghc/ghc/-/issues?label\_name=javascript}{tickets with JavaScript label}
+     \end{itemize}
+   \item Support generating TypeScript code
+   \item Support generating JS source maps
+   \item Implement support for delimited continuation primops
+   \item Your ideas here...
+   \end{itemize}
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Contact}
+  \begin{itemize}
+    \item For assistance:
+      \begin{itemize}
+        \item Open tickets on GHC's gitlab
+        \item ghc-devs mailing list
+        \item sylvain.henry@iohk.io or sylvain@haskus.fr
+      \end{itemize}
+  \end{itemize}
+  \vspace{2cm}
+  \begin{center}
+  Work funded by IOG\\\includegraphics[scale=0.3]{images/iohk-logo.png}
+  \end{center}
+\end{frame}
 
 \end{document}
