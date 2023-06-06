@@ -318,15 +318,55 @@ JS backend’s maintainers (IOG team)
 \vspace{1cm}
 
 \texttt
-{\scriptsize
+{\footnotesize
 \$ ./boot \\
 \$ \alert{emconfigure} ./configure -{}-target=\alert{javascript-unknown-ghcjs} \\
 \$ ./hadrian/build --flavour=default+no\_profiled\_libs+\alert{native\_bignum} -j \\
 \vspace{0.5cm}
-\# wait $\sim$30 minutes, depending on your hardware \\
+\textit{wait $\sim$30 minutes, depending on your hardware} \\
 \vspace{0.5cm}
 \$ alias ghc-js=`pwd`/\_build/stage1/bin/javascript-unknown-ghcjs-ghc\\
 }
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Code size regression}
+\begin{itemize}
+\item We didn’t fully port GHCJS’ JS optimizer
+\begin{itemize}
+\item Reason: was slow and brittle; needed redesign and rewrite
+\end{itemize}
+\end{itemize}
+\hspace{1cm}
+\begin{center}
+\includegraphics[scale=0.4]{images/pipelines.png}
+\end{center}
+\end{frame}
+
+\section{Roadmap and status}
+
+\begin{frame}
+\frametitle{GHCJS upstreaming process(es)}
+
+\begin{itemize}
+\item Before 2022: make GHCJS converge towards GHC
+\begin{itemize}
+\item Avoid Template Haskell: e.g. replace JMacro QuasiQuoters
+\item Only use boot libs: e.g. replace \texttt{lens}
+\item Upgrade fork from GHC 8.6 to GHC 8.10
+\end{itemize}
+
+\item Since 2022: consider GHCJS as a prototype; implement a proper JS backend reusing GHCJS’ code
+%\begin{itemize}
+%\item Port code generator
+%\item Port linker
+%\item Setup CI for the JS backend (pass testsuite)
+%\item Reuse GHC’s utilities: pretty-printer, binary serializer…
+%\item Reimplement Template Haskell support
+%\item … many other intermediate steps (500+ commits squashed into the initial commit)
+%\end{itemize}
+\end{itemize}
 \end{frame}
 
 \end{document}
