@@ -1,0 +1,17 @@
+cabal-version:      2.4
+name:               Diag
+version:            0.1.0.0
+
+author:             Sylvain Henry
+maintainer:         sylvain@haskus.fr
+
+executable MyDiag
+    main-is:          Main.hs
+
+    build-depends:
+        base ^>=4.16.4.0
+      , svg-builder
+    default-language: Haskell2010
+
+    js-sources: helpers.js
+    -- ghc-options: helpers.js

@@ -16,4 +16,4 @@ examples/HelloWorld/HelloWorld
 examples/Prim/Prim
 examples/SumInt64/SumInt64
 examples/Fun/Fun
-
+**/dist-newstyle
