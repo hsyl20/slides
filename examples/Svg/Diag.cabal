@@ -12,6 +12,7 @@ executable MyDiag
         base ^>=4.16.4.0
       , svg-builder
     default-language: Haskell2010
+    ghc-options: -fhide-source-paths
 
-    js-sources: helpers.js
+    -- js-sources: helpers.js
     -- ghc-options: helpers.js

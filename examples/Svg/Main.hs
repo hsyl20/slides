@@ -30,9 +30,10 @@ main :: IO ()
 main = do
   let img = show (svg logo)
   print img
-  -- withCString img setBody
 
--- foreign import javascript
---   "((str_a,str_o) => { document.body.innerHTML = h$decodeUtf8z(str_a,str_o); })"
---   setBody :: CString -> IO ()
 
+  --withCString img setBody
+
+--foreign import javascript unsafe
+--  "((str_a,str_o) => { document.body.innerHTML = h$decodeUtf8z(str_a,str_o); })"
+--  setBody :: CString -> IO ()

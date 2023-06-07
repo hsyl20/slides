@@ -1,8 +1,10 @@
-\documentclass{beamer}
+\documentclass[aspectratio=169]{beamer}
 
 \usetheme{Madrid}
 \usecolortheme{beaver}
 \usepackage{listings}
+
+\setbeamertemplate{navigation symbols}{}
 
 \hypersetup{
     colorlinks=true,
@@ -10,7 +12,7 @@
     filecolor=magenta,      
     urlcolor=darkred,
     pdftitle={GHC's JavaScript Backend},
-    pdfpagemode=FullScreen,
+    % pdfpagemode=FullScreen,
     }
 
 \lstset{
@@ -168,12 +170,12 @@ Wasm backend & C (compiled to Wasm) \\ \hline
 \begin{frame}
 \frametitle{JS backend: first to target a managed platform}
 \begin{itemize}
-\item “Managed platform”: own heap, heap objects, and garbage collector
+\item "Managed platform": own heap, heap objects, and garbage collector
 \item Implies changes:
 \begin{itemize}
 \item No pointers
 \begin{itemize}
-\item Addr\# isn’t represented with a number in JavaScript
+\item Addr\# isn't represented with a number in JavaScript
 \end{itemize}
 \item Foreign heap objects need to be representable in Haskell codes
 \begin{itemize}
@@ -181,12 +183,12 @@ Wasm backend & C (compiled to Wasm) \\ \hline
 \end{itemize}
 \item C FFI imports should be avoided or avoidable
 \begin{itemize}
-\item E.g. by providing fallback Haskell code (e.g. ghc-bignum’s native backend)
+\item E.g. by providing fallback Haskell code (e.g. ghc-bignum's native backend)
 \end{itemize}
 \end{itemize}
-\item All of this will be useful for some future backends too!
+\item It will make implementing other backends easier
 \begin{itemize}
-\item It should be easier to implement JVM and CLR (.Net) backends after this
+\item E.g. JVM and CLR (.Net)
 \end{itemize}
 \end{itemize}
 \end{frame}
@@ -203,7 +205,7 @@ Wasm backend & C (compiled to Wasm) \\ \hline
 \end{itemize}
 \item JS tools reuse
 \begin{itemize}
-\item E.g. we already used JS profilers to find some hotspots
+\item E.g. JS profilers and debuggers
 \end{itemize}
 \item JavaScript is interpreted and readable
 \begin{itemize}
@@ -215,11 +217,10 @@ Wasm backend & C (compiled to Wasm) \\ \hline
 
 \begin{frame}
 \frametitle{Demo: SumInt64}
-\begin{itemize}
+\begin{enumerate}
 \item Show sources
-\item Build
+\item Build and run
 \item Present artefacts
-\item Load in Chromium perf debugger
 \item Load in Firefox perf debugger
 \item Primops
   \begin{itemize}
@@ -228,7 +229,7 @@ Wasm backend & C (compiled to Wasm) \\ \hline
     \item GHC.StgToJS.Prim: Int64SubOp
     \item rts/js/arith.js: h\$hs\_minusInt64
   \end{itemize}
-\end{itemize}
+\end{enumerate}
 \end{frame}
 
 \section{Relation to GHCJS}
@@ -413,7 +414,7 @@ JS backend’s maintainers
 
 \begin{column}{0.3\textwidth}
 \begin{center}
-\includegraphics[height=5.4cm]{images/owl0.png}\\
+\includegraphics[height=5cm]{images/owl0.png}\\
 1. Generate JS code from STG
 \end{center}
 \end{column}
@@ -493,39 +494,37 @@ JS backend’s maintainers
 
 \begin{itemize}
 \item GHCJS had a huge ecosystem
-\item Initial plan: demo with GHCJS' GUI framework (e.g. shine)
+\item Initial plan: demo with some GHCJS' GUI framework (e.g. shine)
 \item Not possible yet because packages need to be updated
 \begin{itemize}
 \item ghcjs-base, ghcjs-dom, jsaddle-*...
 \item Adapt from GHC 8.x to GHC 9.x
-\item Need to fix almost all FFI calls (next topic)
+\item Need to fix almost all FFI calls (next slide)
 \end{itemize}
 \end{itemize}
 \end{frame}
 
-\section{JavaScript FFI}
-
-\begin{frame}[fragile]
-\frametitle{JavaScript FFI}
-
-\begin{lstlisting}[language=haskell]
--- pre existing function
-foreign import javascript
-    "console.log"
-    js_log :: Int# -> Word# -> IO ()
-
--- anonymous function
-foreign import javascript
-    "((x) => { console.log(x); })"
-    js_log :: Int# -> IO ()
-
--- interruptible: explicit continuation
-foreign import javascript interruptible
-    "((x,c) => { c(x + 123); })"
-    js_foo :: Int# -> Int#
-\end{lstlisting}
-
-\end{frame}
+%\begin{frame}[fragile]
+%\frametitle{JavaScript FFI}
+%
+%\begin{lstlisting}[language=haskell]
+%-- pre existing function
+%foreign import javascript
+%    "console.log"
+%    js_log :: Int# -> Word# -> IO ()
+%
+%-- anonymous function
+%foreign import javascript
+%    "((x) => { console.log(x); })"
+%    js_log :: Int# -> IO ()
+%
+%-- interruptible: explicit continuation
+%foreign import javascript interruptible
+%    "((x,c) => { c(x + 123); })"
+%    js_foo :: Int# -> Int#
+%\end{lstlisting}
+%
+%\end{frame}
 
 
 \begin{frame}[fragile]
@@ -556,19 +555,32 @@ foreign import javascript
 
 \end{frame}
 
-
-\begin{frame}[fragile]
-  \frametitle{JavaScript FFI: multi-variables values}
-  \begin{itemize}
-    \item Unboxed tuples, 64-bit types, Addr\#, etc. can’t be passed as a single JS value
+\begin{frame}
+\frametitle{Demo: Svg}
+  \begin{enumerate}
+    \item Build and run with native backend
+    \item Build and run with JS backend
       \begin{itemize}
-    \item Passed as several arguments
-    \item Returned in additional h\$retN registers
+        \item Show how to run cabal (build.sh)
+        \item Run and debug
+        \item js-sources (+bug)
       \end{itemize}
-    \item Demo: FFI example
-  \end{itemize}
-
+    \item Load in the browser
+  \end{enumerate}
 \end{frame}
+
+%\begin{frame}[fragile]
+%  \frametitle{JavaScript FFI: multi-variables values}
+%  \begin{itemize}
+%    \item Unboxed tuples, 64-bit types, Addr\#, etc. can’t be passed as a single JS value
+%      \begin{itemize}
+%    \item Passed as several arguments
+%    \item Returned in additional h\$retN registers
+%      \end{itemize}
+%    \item Demo: FFI example
+%  \end{itemize}
+%
+%\end{frame}
 
 
 \section{Internals}
@@ -580,18 +592,19 @@ foreign import javascript
 \item Declare platform: ghc-boot:GHC.Platform.ArchOS
 \item Fix build system: config.sub, hadrian, Cabal (js-sources),
   utils/deriveConstants
-\item Add compilation pipeline: GHC.StgToJS.CodeGen and its deps
+\item Add new IR: GHC.JS.Syntax
+\item Add compilation pipeline: GHC.StgToJS.CodeGen
 \item Add FFI support: GHC.HsToCore.Foreign.JavaScript
 \item Fix boot libraries
   \begin{itemize}
 \item JS: implement primitives (Posix…) using JS APIs
-\item e.g. libraries/base/jsbits + foreign import javascript
+\item e.g. libraries/base/jsbits, js-sources, foreign import javascript
   \end{itemize}
 \item Add linker support: GHC.StgToJS.Linker
-\item Add runtime system (RTS) or reuse existing one: rts/js/*
-\item Add interpreter (for Template Haskell): GHC.Runtime.Interpreter.JS and
+\item Add runtime system or reuse existing one: rts/js/*
+\item Add interpreter for Template Haskell: GHC.Runtime.Interpreter.JS and
   \texttt{js-interp.js}
-\item Hook all this into the compiler driver: GHC.Driver.Backend
+\item Hook all this into the compiler driver: GHC.Driver.\{Backend...\}
 \end{itemize}
 \end{frame}
 
@@ -618,7 +631,7 @@ foreign import javascript
   \begin{itemize}
     \item STG objects: Con, Fun, Thunk, PAP, Blackhole…
       \begin{itemize}
-        \item Cf Ben's talk two days ago
+        \item Cf Ben's talk yesterday
         \item Represented in JS as object: \texttt{\{ f, d1, d2, m \}}
         \item f: properties ("info-table") and entry
           function
@@ -629,7 +642,7 @@ foreign import javascript
       \begin{itemize}
         \item \texttt{-ddisable-js-minifier}
         \item Without optimization
-        \item Present STG and JS
+        \item Present HS, STG and JS
       \end{itemize}
   \end{itemize}
 \end{frame}
@@ -683,8 +696,9 @@ foreign import javascript
       \begin{itemize}
         \item show rts/js/thread.js runThreadSlice
         \item "Fun" demo
-        \item add \texttt{h\$log(c)}
-        \item add \texttt{if (c.toString().match("main"))}
+        \item add \texttt{h\$log(c.name)}
+        \item add \texttt{if (c.name.match("main"))}
+        \item add a bang to x in add10
       \end{itemize}
   \end{itemize}
 \end{frame}

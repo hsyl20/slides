@@ -6,6 +6,7 @@ module Main where
 
 import Data.Word
 import GHC.Exts
+import GHC.Ptr
 import Foreign.Marshal.Alloc
 import Foreign.Storable
 
@@ -29,7 +30,8 @@ main = do
 
   -- JS dump to the rescue
   -- js_log x
-  -- js_log y
+  -- print (x `plusPtr` 7)
+  -- js_log (x `plusPtr` 7)
 
 foreign import javascript
   "((a,o) => h$log({ addr: a, offset: o}))"

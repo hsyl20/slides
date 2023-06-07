@@ -9,15 +9,20 @@ function h$hashable_fnv_hash_offset(str_a, str_o, offset, len, salt) {
 function h$hashable_fnv_hash_offset(str_a, str_o, len, salt) {
   var hash = salt;
   while (len--) {
-    hash = (hash * FNV_PRIME) ^ (str_a.buf[str_o++]);
+    hash = ((hash * FNV_PRIME) ^ (str_a.buf[str_o++])) >>> 0;
   }
-
   return hash;
 }
 
-function h$bytestring_is_valid_utf8(src_a, src_o, len) {
-  return valid8(src_a.buf.slice(src_o,src_o+len)) ? 1 : 0;
-}
+
+
+
+
+
+
+//function h$bytestring_is_valid_utf8(src_a, src_o, len) {
+//  return valid8(src_a.buf.slice(src_o,src_o+len)) ? 1 : 0;
+//}
 
 function valid8(buffer) {
     var code, i, j, len, mask, mode, n;
