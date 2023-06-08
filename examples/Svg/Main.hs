@@ -32,8 +32,8 @@ main = do
   print img
 
 
-  --withCString img setBody
+  -- withCString img setBody
 
---foreign import javascript unsafe
---  "((str_a,str_o) => { document.body.innerHTML = h$decodeUtf8z(str_a,str_o); })"
---  setBody :: CString -> IO ()
+-- foreign import javascript unsafe
+--   "((str_a,str_o) => { document.body.innerHTML = h$decodeUtf8z(str_a,str_o); })"
+--   setBody :: CString -> IO ()

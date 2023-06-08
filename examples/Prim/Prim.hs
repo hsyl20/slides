@@ -11,18 +11,18 @@ import Foreign.Marshal.Alloc
 import Foreign.Storable
 
 bar :: (# #) -> (# Word32#, Word64#, Float#, Addr# #)
-bar _ = (# 32#Word32, 64#Word64, 17.0#, nullAddr# #)
+bar _ = (# 32#Word32, 0x7_FFFFFFFF#Word64, 17.0#, nullAddr# #)
 
 
 main :: IO ()
 main = do
-  -- initialize 2 ByteArrays
+  -- allocate 2 buffers
   x <- mallocBytes 4
   y <- mallocBytes 4
-  poke x (4 :: Word32)
-  poke y (8 :: Word32)
+  poke x (1 :: Word32)
+  poke y (2 :: Word32)
 
-  -- show their "address"
+  -- print their "address"
   print (x,y)
 
   -- peek and show the values

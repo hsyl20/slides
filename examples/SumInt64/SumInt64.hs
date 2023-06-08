@@ -3,7 +3,7 @@ module Main where
 import Data.Int
 
 main :: IO ()
-main = print (foo 0 12345678)
+main = print (foo 0 1234567)
 
 foo :: Int64 -> Int64 -> Int64
 foo r x

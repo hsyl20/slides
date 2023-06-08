@@ -10,7 +10,14 @@ just5 = Just 5
 
 -- | CAF
 someCAF :: Integer
-someCAF = sum [0..]
+someCAF = sum [0..10]
 
 main :: IO ()
-main = return ()
+main = do
+  -- dumpCAF
+  print someCAF
+  -- dumpCAF
+
+foreign import javascript
+  "(() => { h$log(h$mainZCMainzisomeCAF);})"
+  dumpCAF :: IO ()
