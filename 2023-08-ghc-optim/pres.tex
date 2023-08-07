@@ -1,0 +1,354 @@
+\documentclass[aspectratio=169]{beamer}
+
+\usetheme{Madrid}
+\usecolortheme{beaver}
+\usepackage{listings}
+\usepackage{relsize}
+
+\setbeamertemplate{navigation symbols}{}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=darkred,
+    filecolor=magenta,      
+    urlcolor=darkred,
+    pdftitle={GHC's JavaScript Backend},
+    % pdfpagemode=FullScreen,
+    }
+
+\lstset{
+  showstringspaces=false,
+  stringstyle=\ttfamily\color{red},
+  commentstyle=\ttfamily,
+  keywordstyle=
+}
+
+\AtBeginSection[]
+{
+  \begin{frame}
+    \frametitle{Table of Contents}
+    \tableofcontents[currentsection]
+  \end{frame}
+}
+
+\title{GHC's Optimizer}
+\author{Sylvain HENRY}
+\institute[IOG]{\includegraphics[scale=0.2]{images/iohk-logo.png}}
+\date[2023-08-10]{GHC DevX -- Learning Call\\10 August 2023}
+
+\begin{document}
+
+\frame{\titlepage}
+
+%\begin{frame}
+%\frametitle{Table of Contents}
+%\tableofcontents
+%\end{frame}
+
+\begin{frame}
+\frametitle{GHC's optimizations}
+
+  \begin{itemize}
+    \item Core optimizations
+    \item STG optimizations
+    \item Cmm optimizations
+    \item Asm optimizations
+  \end{itemize}
+
+  We won't have time to fully cover everything. I'll only give an intuition and
+  some references to learn more.
+\end{frame}
+
+\section{Core optimizations}
+
+\subsection{Occurrence analysis}
+
+\begin{frame}
+  \frametitle{Core: occurrence analyzer}
+
+  Occurrence analyzer does much more than what it says on the tin!
+
+  \begin{itemize}
+    \item Occurrence analysis
+    \item Dead let-binding elimination
+    \item Strongly-Connected Component (SCC) analysis for let-bindings
+    \item Loop-breaker selection in recursive let-bindings
+    \item Join points detection
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Core: occurrence analysis \& dead let-binding elimination}
+
+  \begin{itemize}
+    \item bottom-up traversal of an expression to annotate each variable binding
+      with its usage:
+      \begin{itemize}
+        \item how many times: 0, 1 (in different code paths or not), $>$1
+        \item in which context: in a lambda abstraction, in one-shot lambda...
+      \end{itemize}
+    \item dead let-binding elimination
+      \begin{itemize}
+        \item Done during the traversal
+        \item let b[dead] = rhs in e $\Longrightarrow$ e
+      \end{itemize}
+    \item Some accidental complexity for performance
+      \begin{itemize}
+        \item `\textbackslash x $\rightarrow$ \textbackslash y $\rightarrow$
+          ... x ...` considered as `\textbackslash x y $\rightarrow$ ... x
+          ...` (x used once instead of inside a lambda; need to be careful with
+          partial applications...)
+      \end{itemize}
+  \end{itemize}
+
+  References:
+  \begin{itemize}
+    \item 2002 - "Secrets of the GHC inliner" (SPJ, Marlow)
+    \item GHC.Core.Opt.OccurAnal
+      \begin{itemize}
+        \item Note [Dead code]
+      \end{itemize}
+  \end{itemize}
+
+\end{frame}
+
+\begin{frame}
+  \frametitle{Join point detection}
+
+  \begin{itemize}
+    \item bottom-up traversal
+      \begin{itemize}
+        \item track *always* tail-called variables (and their number of arguments)
+        \item update binding to say that it could become a join point
+          \begin{itemize}
+            \item doesn't transform the binding itself
+            \item may need eta-expansion of the rhs and updates of the call
+              sites (?)
+            \item Simplifier does the work of transforming identified
+              let-bindings into join points
+          \end{itemize}
+      \end{itemize}
+    \item Join points interact with occurrence analysis
+      \begin{itemize}
+        \item Consider non-rec join points as if they were inlined, not as lets
+          \begin{itemize}
+            \item Otherwise usage could be MultiOccs while it should be OneOcc (in
+              several branches).
+          \end{itemize}
+          \item Only consider preexisting join points, not the candidates we
+            discover in this pass.
+      \end{itemize}
+  \end{itemize}
+
+  References:
+  \begin{itemize}
+    \item Many notes in GHC.Core.Opt.OccurAnal
+    \item 2017 - "Compiling without continuations" (SPJ, Maurer, Downen, Ariola)
+      \begin{itemize}
+        \item Implementation doesn't fully follow the paper. See "join points"
+          notes in GHC.Core 
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Dependency analysis}
+
+  \begin{itemize}
+    \item Transform let-bindings into nest of:
+      \begin{itemize}
+        \item Single let-binding (rec or non-rec)
+        \item Really recursive binding groups
+      \end{itemize}
+
+    \item Select loop-breaker in recursive binding groups
+      \begin{itemize}
+        \item Allow non-loop-breakers to be considered just like non-rec!
+          Inline them, etc.
+        \item Loop-breaker selection: heuristics to rate bindings to find
+          the least likely to be inlined
+      \end{itemize}
+
+    \item Rules and unfoldings have to be taken into account
+      \begin{itemize}
+        \item Rules' RHSs are considered as extra RHSs when doing dependency
+          analysis
+        \item I.e. if we apply the rule, the free variables of the RHS should be well-scoped.
+      \end{itemize}
+  \end{itemize}
+
+  References:
+  \begin{itemize}
+    \item 2002 - "Secrets of the GHC inliner" (SPJ, Marlow)
+    \item GHC.Core.Opt.OccurAnal
+      \begin{itemize}
+        \item Note [Choosing loop breakers]
+        \item Note [Rules are extra RHSs]
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\subsection{Simple optimiser}
+
+\begin{frame}
+  \frametitle{Simple optimiser}
+
+  \begin{itemize}
+    \item Simple optimiser isn't so simple.
+    \item Performs:
+      \begin{itemize}
+        \item Beta-reduction
+        \item Inlining
+        \item Case of known constructor
+        \item Dead code elimination
+        \item Coercion optimisation
+        \item Eta-reduction
+        \item ... more? (documentation is terrible)
+      \end{itemize}
+  \end{itemize}
+
+  References:
+  \begin{itemize}
+    \item GHC.Core.SimpleOpt
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Beta-reduction}
+
+  \begin{itemize}
+    \item (\textbackslash{}x $\rightarrow$ e) b $\Longrightarrow$ let x = b in e
+    \item Useful because let-binding ensures there is a rhs
+    \begin{itemize}
+      \item With lambda application, we have to look outside
+      \item E.g. consider: (\textbackslash{}x $\rightarrow$ \textbackslash{}y
+        $\rightarrow$ \textbackslash{}z $\rightarrow$ e) a b c
+      \item Better to beta-reduce then float-out the let-binding
+    \end{itemize}
+  \end{itemize}
+
+  References:
+
+  \begin{itemize}
+    \item 2002 - "Secrets of the GHC inliner" (SPJ, Marlow)
+    \item 1987 - "The implemetnation of functional programming languages" (SPJ)
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Inlining}
+  \begin{itemize}
+    \item Happens after occurrence analysis
+      \begin{itemize}
+        \item Binding variables are annotated with occurrence info:
+        \begin{itemize}
+          \item how many occurrences: 0, 1 (in different code paths or not), $>$1
+          \item in which context: in a lambda abstraction...
+        \end{itemize}
+      \end{itemize}
+
+    \item pre-inline-unconditionally
+      \begin{itemize}
+        \item Inline unoptimized RHS for bindings used once (and not in a
+          lambda...)
+      \end{itemize}
+    
+    \item post-inline-unconditionally
+      \begin{itemize}
+        \item Optimize E into E' in `let x = E in ...`
+        \item Inline E' if
+          \begin{itemize}
+            \item x isn't exported, nor a loop-breaker
+            \item E' is trivial
+          \end{itemize}
+      \end{itemize}
+
+    \item call-site-inline (not done by the simple optimiser)
+      \begin{itemize}
+        \item Just keep `let x = E' in ...`
+        \item At each occurrence of `x`, consider inlining it or not
+      \end{itemize}
+
+  \end{itemize}
+  
+  References:
+  \begin{itemize}
+    \item 2002 - "Secrets of the GHC inliner" (SPJ, Marlow)
+  \end{itemize}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Case of known constructor}
+  \begin{itemize}
+    \item Also called "case reduction" (Santos)
+    \item case C a b of ... C x y $\rightarrow$ e ... $\Longrightarrow$ e[a/x,b/y]
+    \item Also applies to variable scrutinees which we know to be bound to a
+      datacon
+      \begin{itemize}
+        \item case C a b of v \{ .. case v of ... C x y $\rightarrow$ e ...\}
+        \item let v = C a b in .. case v of ... C x y $\rightarrow$ e ...
+      \end{itemize}
+    \item Made trickier by datacon wrappers that inline late... but for which we
+      want to apply this optimization early
+      \begin{itemize}
+        \item Inline wrapper on the fly. Some wrinkles (see Notes)
+      \end{itemize}
+  \end{itemize}
+
+  References:
+  \begin{itemize}
+    \item 1995 - "Compilation by transformation in non-strict functional
+      languages" (Santos' thesis)
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Coercion optimization}
+  \begin{itemize}
+    \item Coercion: proof that `foo $\sim$ bar`
+    \item Coercion ADT in GHC.Core.TyCo.Rep: Refl, Sym, Trans...
+    \item E.g. \item sym (sym c) $\Longrightarrow$ c
+    \item Can get much more complex
+    \item Especially with coercion roles for equality:
+      \begin{itemize}
+        \item Nominal (Haskell type equality)
+        \item Representational ($\sim$ coercible equality, e.g. newtype)
+        \item Phantom (can always be made equal? Perhaps not with different kinds)
+      \end{itemize}
+  \end{itemize}
+
+  References:
+  \begin{itemize}
+    \item GHC.Core.Coercion.Opt
+    \item 2007 - (coercions) "System F with Type Equality Coercions" (Sulzmann
+      et al)
+    \item 2011 - (roles) "Generative Type Abstraction and Type-level Computation" (Weirich et al)
+    \item 2013 - (opt) "Evidence normalization in System FC" (SPJ, Vytiniotis)
+  \end{itemize}
+\end{frame}
+
+\section{Further work}
+
+\begin{frame}
+  \frametitle{Todo}
+
+  \begin{itemize}
+    \item Rest of simple optimiser: eta-reduction
+    \item Rest of Santos' thesis (see p24)
+    \item My: scrutinee case folding, constant folding
+    \item Rewrite rules
+    \item Demand-analysis
+    \item Binder-swap, worker-wrapper, CPR, SAT, specialization
+    \item Float-in, float-out, full-laziness
+    \item Exitification
+    \item Unrolling (liberate-case)
+    \item CSE
+    \item Spec-constr
+    \item STG: CSE, constructor reuse
+  \end{itemize}
+
+\end{frame}
+
+\end{document}
