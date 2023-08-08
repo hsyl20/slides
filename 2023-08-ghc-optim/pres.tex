@@ -4,6 +4,7 @@
 \usecolortheme{beaver}
 \usepackage{listings}
 \usepackage{relsize}
+\usepackage{ulem}
 
 \setbeamertemplate{navigation symbols}{}
 
@@ -59,7 +60,104 @@
   some references to learn more.
 \end{frame}
 
+\section{Core AST}
+
+\begin{frame}[fragile]
+  \frametitle{Core}
+  \begin{lstlisting}
+data Expr b
+  = Var   Id
+  | Lit   Literal
+  | App   (Expr b) (Arg b)
+  | Lam   b (Expr b)
+  | Let   (Bind b) (Expr b)
+  | Case  (Expr b) b Type [Alt b]
+  | Cast  (Expr b) CoercionR
+  | Tick  CoreTickish (Expr b)
+  | Type  Type
+  | Coercion Coercion
+  \end{lstlisting}
+  References:
+  \begin{itemize}
+    \item 2022 - "Into the Core: Squeezing Haskell into \sout{9} 10 constructors" (SPJ)
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Core: 10 constructors}
+  \begin{itemize}
+    \item Could we do better?
+    \pause
+     Yes! One constructor!
+  \end{itemize}
+  \begin{lstlisting}
+  data Expr = Expr Dynamic
+
+  data Var = Var Id
+  data Lit = Lit Literal
+  ...
+  \end{lstlisting}
+  \pause
+  \begin{itemize}
+    \item Hey! You're cheating! You've lost type safety!
+    \pause
+    \item Yes, but it's already lost! Look at `Id` (IdDetails, IdInfo):
+      \begin{itemize}
+        \item We need shotgun parsing to handle ad-hoc cases:
+        \begin{itemize}
+          \item Primops, data-con workers \& wrappers, class ops, record
+            selectors, covars...
+        \end{itemize}
+        \item Sometimes they work the same, sometimes they don't. Good luck!
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Core optimization}
+  Core optimization in practice is much trickier than it looks (e.g. in papers)
+  \begin{itemize}
+    \item The compiler doesn't help much (cf shotgun parsing)
+    \item E.g. it doesn't tell you that you forgot to handle `keepAlive\#`
+      primop properly in your optimization pass or analysis
+      \begin{itemize}
+        \item At best: missed optimization
+        \item At worst: bug!
+      \end{itemize}
+    \pause
+    \item Dealing with laziness and bottom is difficult
+      \begin{itemize}
+        \item "Case" does both evaluation and scrutinization
+          \begin{itemize}
+            \item "Tag-inference" tries to detect already evaluated variables
+            \item case-without-evaluation and already-evaluated-binding not explicit in Core AST
+            \item Bugs! Invariants not upheld, etc.
+          \end{itemize}
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{$<$/rant$>$}
+\end{frame}
+
 \section{Core optimizations}
+
+\begin{frame}
+  \frametitle{Core simplifier}
+  \begin{itemize}
+    \item Simplifier has 4 phases: gentle, 2, 1, 0
+      \begin{itemize}
+        \item Some rules and unfoldings (inlining) only enabled in some phases
+        \item Gentle is the "special initial phase"
+      \end{itemize}
+    \item Each phase runs several iterations of the optimization pipeline
+      \begin{itemize}
+        \item Until fixpoint or N iterations (4 by default, set with
+          `-fmax-simplifier-iterations`)
+      \end{itemize}
+  \end{itemize}
+\end{frame}
 
 \subsection{Occurrence analysis}
 
