@@ -136,7 +136,7 @@ data Type     = ...
         \item We need shotgun parsing to handle ad-hoc cases:
         \begin{itemize}
           \item Primops, data-con workers \& wrappers, class ops, record
-            selectors, covars...
+            selectors, covars, dfuns...
         \end{itemize}
         \item Sometimes they work the same, sometimes they don't. Good luck!
       \end{itemize}
@@ -223,11 +223,13 @@ data Type     = ...
       \begin{itemize}
         \item "Utils" module contains optimizations too! e.g. see mkCase
       \end{itemize}
+    \item 1995 - "Compilation by transformation in non-strict functional
+      languages" (Santos' thesis)
   \end{itemize}
 \end{frame}
 
 \begin{frame}
-  \frametitle{Core: occurrence analyzer}
+  \frametitle{Occurrence analyzer}
 
   Occurrence analyzer does much more than what it says on the tin!
 
@@ -241,7 +243,7 @@ data Type     = ...
 \end{frame}
 
 \begin{frame}
-  \frametitle{Core: occurrence analysis \& dead let-binding elimination}
+  \frametitle{Occurrence analysis \& dead let-binding elimination}
 
   \begin{itemize}
     \item bottom-up traversal of an expression to annotate each variable binding
@@ -551,16 +553,44 @@ data Type     = ...
   \end{itemize}
 \end{frame}
 
+\begin{frame}
+  \frametitle{Specialiser}
+
+  \begin{itemize}
+    \item Idea
+      \begin{itemize}
+        \item Find calls to polymorphic functions with type-class arguments
+        \item Generate specialized versions of the polymorphic functions and call
+        them instead
+      \end{itemize}
+    \item Works inside a module
+    \item Also works for INLINABLE bindings from other modules
+      \begin{itemize}
+        \item Disable with -fno-cross-module-specialize
+      \end{itemize}
+    \item SPECIALIZE pragma
+      \begin{itemize}
+        \item User directed specialization
+        \item Generate a rewrite rule to replace appropriate call sites
+      \end{itemize}
+  \end{itemize}
+
+  References:
+  \begin{itemize}
+    \item GHC.Core.Opt.Specialise (SPJ's notes, 1993)
+  \end{itemize}
+\end{frame}
+
 \section{Further work}
 
 \begin{frame}
   \frametitle{Todo}
 
   \begin{itemize}
-    \item Rest of simple optimiser: eta-reduction
+    \item eta-reduction / eta-expansion
     \item Rest of Santos' thesis (see p24)
     \item Demand-analysis
-    \item Binder-swap, worker-wrapper, CPR, SAT, specialization
+    \item Binder-swap, worker-wrapper, CPR, SAT
     \item Float-in, float-out, full-laziness
     \item Exitification
     \item Unrolling (liberate-case)
