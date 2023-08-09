@@ -616,6 +616,39 @@ data Type     = ...
   \end{itemize}
 \end{frame}
 
+\begin{frame}
+  \frametitle{Common subexpression (CSE)}
+
+  \begin{itemize}
+    \item Idea: common up bindings with the same RHS / cases with the same
+      scrutinee
+    \item Issues:
+      \begin{itemize}
+        \item Rules attached to one binding but not the other
+        \item (NO)INLINE attached to one binding but not the other
+        \item Bindings with stable unfoldings
+          \begin{itemize}
+            \item RHSs look the same now, but inlined they would be different
+            \item But in some cases we don't care (e.g. worker-wrapper)...
+          \end{itemize}
+        \item Join points: can't cse join points in non tail position; musn't
+          mess with join point arity by CSEing join points' lambdas...
+        \item Top-level unboxed strings: can't be variables... special case!
+        \item Ticks: we strip some ticks to CSE more but then it's bogus
+        \item Careful: CSE changes occurrence info and potentially demand info!
+          \begin{itemize}
+            \item We zap them: we could probably merge them but it would require
+              another pass to fix the occurrences...
+          \end{itemize}
+      \end{itemize}
+    \item CSE self-recursive bindings by rewriting them as for use with `fix`
+  \end{itemize}
+
+  References:
+  \begin{itemize}
+    \item GHC.Core.Opt.CSE
+  \end{itemize}
+\end{frame}
 
 \section{Further work}
 
@@ -629,9 +662,10 @@ data Type     = ...
     \item Binder-swap, worker-wrapper, CPR, SAT
     \item Float-in, float-out, full-laziness
     \item Unrolling (liberate-case)
-    \item CSE
     \item Spec-constr
     \item STG: CSE, constructor reuse
+    \item Cmm
+    \item Asm
   \end{itemize}
 
 \end{frame}
