@@ -63,8 +63,10 @@
 \section{Core AST}
 
 \begin{frame}[fragile]
-  \frametitle{Core}
-  \begin{lstlisting}
+  \frametitle{Core AST}
+  \begin{columns}
+    \begin{column}{0.55\textwidth}
+      \begin{lstlisting}[language=haskell]
 data Expr b
   = Var   Id
   | Lit   Literal
@@ -77,21 +79,49 @@ data Expr b
   | Type  Type
   | Coercion Coercion
   \end{lstlisting}
+    \end{column}
+    \begin{column}{0.45\textwidth}
+      \begin{onlyenv}<2>
+      \small
+      \begin{lstlisting}[language=haskell]
+data Alt b
+  = Alt AltCon [b] (Expr b)
+
+data AltCon
+  = DataAlt DataCon
+  | LitAlt  Literal
+  | DEFAULT
+
+data Bind b
+  = NonRec b (Expr b)
+  | Rec [(b, (Expr b))]
+
+type Id       = Var
+data Var      = ...
+data Coercion = ...
+data Type     = ...
+      \end{lstlisting}
+    \end{onlyenv}
+    \end{column}
+  \end{columns}
+
+  \begin{onlyenv}<1>
   References:
   \begin{itemize}
     \item 2022 - "Into the Core: Squeezing Haskell into \sout{9} 10 constructors" (SPJ)
   \end{itemize}
+  \end{onlyenv}
 \end{frame}
 
 \begin{frame}[fragile]
-  \frametitle{Core: 10 constructors}
+  \frametitle{Rant: Core's 10 constructors}
   \begin{itemize}
-    \item Could we do better?
+    \item Could we have less than 10 constructors?
     \pause
      Yes! One constructor!
   \end{itemize}
-  \begin{lstlisting}
-  data Expr = Expr Dynamic
+  \begin{lstlisting}[language=haskell,basicstyle=\small]
+  data Expr = Expr Dynamic -- contains a Core datacon, promise
 
   data Var = Var Id
   data Lit = Lit Literal
@@ -101,7 +131,7 @@ data Expr b
   \begin{itemize}
     \item Hey! You're cheating! You've lost type safety!
     \pause
-    \item Yes, but it's already lost! Look at `Id` (IdDetails, IdInfo):
+    \item Yes, but it's already quite lost! Look at `Id` (IdDetails, IdInfo):
       \begin{itemize}
         \item We need shotgun parsing to handle ad-hoc cases:
         \begin{itemize}
@@ -110,42 +140,71 @@ data Expr b
         \end{itemize}
         \item Sometimes they work the same, sometimes they don't. Good luck!
       \end{itemize}
-  \end{itemize}
-\end{frame}
-
-\begin{frame}
-  \frametitle{Core optimization}
-  Core optimization in practice is much trickier than it looks (e.g. in papers)
-  \begin{itemize}
-    \item The compiler doesn't help much (cf shotgun parsing)
-    \item E.g. it doesn't tell you that you forgot to handle `keepAlive\#`
-      primop properly in your optimization pass or analysis
-      \begin{itemize}
-        \item At best: missed optimization
-        \item At worst: bug!
-      \end{itemize}
     \pause
-    \item Dealing with laziness and bottom is difficult
-      \begin{itemize}
-        \item "Case" does both evaluation and scrutinization
-          \begin{itemize}
-            \item "Tag-inference" tries to detect already evaluated variables
-            \item case-without-evaluation and already-evaluated-binding not explicit in Core AST
-            \item Bugs! Invariants not upheld, etc.
-          \end{itemize}
-      \end{itemize}
+    \item Take-away: Core optimization in practice is much trickier than it looks (e.g. in papers)
+    \begin{itemize}
+      \item The compiler doesn't help much (cf shotgun parsing)
+      \item E.g. it doesn't tell you that you forgot to handle `keepAlive\#` or
+        `seq\#` primops properly in your optimization pass or analysis
+        \begin{itemize}
+          \item At best: missed optimization
+          \item At worst: bug!
+        \end{itemize}
+    \end{itemize}
   \end{itemize}
-\end{frame}
-
-\begin{frame}
-  \frametitle{$<$/rant$>$}
 \end{frame}
 
 \section{Core optimizations}
 
 \begin{frame}
-  \frametitle{Core simplifier}
+  \frametitle{Core optimization pipeline}
   \begin{itemize}
+    \item Pipeline stages (a.k.a. CoreToDo)
+      \begin{itemize}
+        \item Simplifier (many local transformations)
+        \item Worker-wrapper
+        \item Float-in and float-out
+        \item Full-laziness
+        \item + many other passes and analyses
+      \end{itemize}
+  \end{itemize}
+
+  References:
+  \begin{itemize}
+    \item GHC.Core.Opt.Pipeline
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Simple optimiser: simpler pipeline}
+
+  \begin{itemize}
+    \item Performs:
+      \begin{itemize}
+        \item Occurrence analysis
+        \item Beta-reduction
+        \item Inlining
+        \item Case of known constructor
+        \item Dead code elimination
+        \item Coercion optimisation
+        \item Eta-reduction
+        \item ... more? (documentation is terrible)
+      \end{itemize}
+    \item Used to simplify statically defined unfoldings, etc.
+    \item Pure function: no stats, no dumps, etc.
+    \item Do not confound with the "simplifier" (more complex, use IO)
+  \end{itemize}
+
+  References:
+  \begin{itemize}
+    \item GHC.Core.SimpleOpt
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Simplifier}
+  \begin{itemize}
+    \item Performs a bunch of local transformations
     \item Simplifier has 4 phases: gentle, 2, 1, 0
       \begin{itemize}
         \item Some rules and unfoldings (inlining) only enabled in some phases
@@ -157,9 +216,15 @@ data Expr b
           `-fmax-simplifier-iterations`)
       \end{itemize}
   \end{itemize}
-\end{frame}
 
-\subsection{Occurrence analysis}
+  References:
+  \begin{itemize}
+    \item GHC.Core.Opt.Simplify.*
+      \begin{itemize}
+        \item "Utils" module contains optimizations too! e.g. see mkCase
+      \end{itemize}
+  \end{itemize}
+\end{frame}
 
 \begin{frame}
   \frametitle{Core: occurrence analyzer}
@@ -286,31 +351,6 @@ data Expr b
   \end{itemize}
 \end{frame}
 
-\subsection{Simple optimiser}
-
-\begin{frame}
-  \frametitle{Simple optimiser}
-
-  \begin{itemize}
-    \item Simple optimiser isn't so simple.
-    \item Performs:
-      \begin{itemize}
-        \item Beta-reduction
-        \item Inlining
-        \item Case of known constructor
-        \item Dead code elimination
-        \item Coercion optimisation
-        \item Eta-reduction
-        \item ... more? (documentation is terrible)
-      \end{itemize}
-  \end{itemize}
-
-  References:
-  \begin{itemize}
-    \item GHC.Core.SimpleOpt
-  \end{itemize}
-\end{frame}
-
 \begin{frame}
   \frametitle{Beta-reduction}
 
@@ -405,15 +445,20 @@ data Expr b
 \begin{frame}
   \frametitle{Coercion optimization}
   \begin{itemize}
-    \item Coercion: proof that `foo $\sim$ bar`
+    \item Coercion: proof term that `foo $\sim$ bar` (this is its type)
+      \begin{itemize}
     \item Coercion ADT in GHC.Core.TyCo.Rep: Refl, Sym, Trans...
-    \item E.g. \item sym (sym c) $\Longrightarrow$ c
+      \end{itemize}
+    \item Optimization
+      \begin{itemize}
+    \item E.g. sym (sym c) $\Longrightarrow$ c
     \item Can get much more complex
     \item Especially with coercion roles for equality:
       \begin{itemize}
         \item Nominal (Haskell type equality)
         \item Representational ($\sim$ coercible equality, e.g. newtype)
         \item Phantom (can always be made equal? Perhaps not with different kinds)
+      \end{itemize}
       \end{itemize}
   \end{itemize}
 
@@ -427,6 +472,85 @@ data Expr b
   \end{itemize}
 \end{frame}
 
+\begin{frame}
+  \frametitle{Rewrite rules}
+  \begin{itemize}
+    \item Rewrite an expression into another
+      \begin{itemize}
+        \item User-provided rules (RULES pragmas, eg. foldr/build fusion)
+        \item Built-in rules (e.g. constant folding)
+        \item Compiler-generated rules (e.g. for specialisation)
+      \end{itemize}
+    \item Add quite a lot of internal complexity
+      \begin{itemize}
+        \item User-provided rules' LHS expressed using surface syntax. LHS
+          lowered into Core.
+        \item Other optimisations then get in the way of rule application (worker wrapper, etc.)
+          $\rightarrow$ phases
+        \item Rules RHS are alternate RHS for functions: they can mess up with
+          dependency analysis and occurrence analysis.
+      \end{itemize}
+  \end{itemize}
+
+  References:
+  \begin{itemize}
+    \item 2001 - "Playing by the rules: rewriting as a practical optimisation
+      technique" (SPJ et al)
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Constant folding}
+  \begin{itemize}
+    \item Rewrite rules for primops
+      \begin{itemize}
+    \item Actually implemented as built-in rewrite rules
+      \begin{itemize}
+    \item Some might be implemented with RULES: e.g. (+\#) x 0\#
+      $\Longrightarrow$ x
+    \item Some can't: (+\#) lit1 lit2 $\Longrightarrow$ lit3
+      \end{itemize}
+    \item I've added many more complex rules for nested expressions:
+      \begin{itemize}
+        \item e.g. (x - lit1) - (y - lit2) $\Longrightarrow$ (lit2-lit1) + (x-y)
+      \end{itemize}
+      \end{itemize}
+    \pause
+    \item Rewrite rules for Integer/Natural/Bignat
+      \begin{itemize}
+        \item I have been trying to only keep Bignat rules
+          \begin{itemize}
+        \item So that only Bignat values are opaque (and ghc can unpack Int\# or
+          Bignat from Integer)
+        \item WIP because: rewrite rules + unlifted types = issues
+          \end{itemize}
+      \end{itemize}
+    \pause
+    \item Scrutinee constant folding
+      \begin{itemize}
+        \item e.g. case x - 1 of y \{ 5 $\rightarrow$ ..; ..\}
+          $\Longrightarrow$ case x of
+          y' \{ 6 $\rightarrow$ let y = 5 in ..; ..\}
+        \item I've implemented these for my Variant package
+          \begin{itemize}
+            \item case x - 1 of y \{ 0 $\rightarrow$ ..; \_ $\rightarrow$ case
+              y - 1 of z \{ 0
+              $\rightarrow$ ..; \_ $\rightarrow$ case z - 1 of ... 
+            \item $\Longrightarrow$ case x of \{ 0 $\rightarrow$ ..; 1
+              $\rightarrow$ ..; 2 $\rightarrow$ ..; .. \}
+          \end{itemize}
+      \end{itemize}
+    \pause
+    \item Rewrite rule for GHC.Magic.inline, seq, cstringLength,
+      tagToEnum, etc.
+  \end{itemize}
+
+  References:
+  \begin{itemize}
+    \item GHC.Core.Opt.ConstantFold
+  \end{itemize}
+\end{frame}
+
 \section{Further work}
 
 \begin{frame}
@@ -435,8 +559,6 @@ data Expr b
   \begin{itemize}
     \item Rest of simple optimiser: eta-reduction
     \item Rest of Santos' thesis (see p24)
-    \item My: scrutinee case folding, constant folding
-    \item Rewrite rules
     \item Demand-analysis
     \item Binder-swap, worker-wrapper, CPR, SAT, specialization
     \item Float-in, float-out, full-laziness
