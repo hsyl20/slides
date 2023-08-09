@@ -554,7 +554,7 @@ data Type     = ...
 \end{frame}
 
 \begin{frame}
-  \frametitle{Specialiser}
+  \frametitle{Specialisation (type-classes)}
 
   \begin{itemize}
     \item Idea
@@ -581,6 +581,42 @@ data Type     = ...
   \end{itemize}
 \end{frame}
 
+\begin{frame}[fragile]
+  \frametitle{Exitification}
+
+  \begin{itemize}
+    \item Idea: allow inlining into "exit paths" of recursive functions by
+      transforming them into join points
+  \end{itemize}
+
+\begin{lstlisting}[language=haskell,basicstyle=\tiny]
+  let t = foo bar
+  joinrec go 0     x y = t (x*x)
+          go (n-1) x y = jump go (n-1) (x+y)
+  in ...
+
+===>
+
+  let t = foo bar
+  join exit x = t (x*x)
+  joinrec go 0     x y = jump exit x
+          go (n-1) x y = jump go (n-1) (x+y)
+  in ...
+\end{lstlisting}
+
+  \begin{itemize}
+    \item Exit join points mustn't be inlined for this to work (ad-hoc)
+    \item IMO it would be better to detect that t occurs once in an ExitJoinPoint in
+      OccurAnal
+  \end{itemize}
+
+  References:
+  \begin{itemize}
+    \item GHC.Core.Opt.Exitify
+  \end{itemize}
+\end{frame}
+
+
 \section{Further work}
 
 \begin{frame}
@@ -592,7 +628,6 @@ data Type     = ...
     \item Demand-analysis
     \item Binder-swap, worker-wrapper, CPR, SAT
     \item Float-in, float-out, full-laziness
-    \item Exitification
     \item Unrolling (liberate-case)
     \item CSE
     \item Spec-constr
