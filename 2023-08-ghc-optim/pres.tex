@@ -50,14 +50,14 @@
 \frametitle{GHC's optimizations}
 
   \begin{itemize}
-    \item Core optimizations
+    \item Core optimizations: this presentation
     \item STG optimizations
     \item Cmm optimizations
     \item Asm optimizations
+    \item Runtime optimizations (e.g. record selector opt in GC)
   \end{itemize}
 
-  We won't have time to fully cover everything. I'll only give an intuition and
-  some references to learn more.
+  Other optimizations could be covered later.
 \end{frame}
 
 \section{Core AST}
@@ -289,6 +289,7 @@ data Type     = ...
   References:
   \begin{itemize}
     \item GHC.Core.Opt.\{FloatIn,FloatOut\}
+    \item 1996 - "Let-floating: moving bindings to give faster programs" (SPJ et al)
     \item 1997 - "A transformation-based optimiser for Haskell" (SPJ, Santos)
     \item 2011 - (static pointers) "Towards Haskell in the Cloud" (SPJ et al)
   \end{itemize}
@@ -305,6 +306,7 @@ data Type     = ...
     \item Strongly-Connected Component (SCC) analysis for let-bindings
     \item Loop-breaker selection in recursive let-bindings
     \item Join points detection
+    \item Binder-swap
   \end{itemize}
 \end{frame}
 
@@ -341,6 +343,23 @@ data Type     = ...
       \end{itemize}
   \end{itemize}
 
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Binder-swap}
+\begin{lstlisting}
+ (1)  case x of b { pi -> ri }
+         ==>
+      case x of b { pi -> ri[b/x] }
+
+ (2)  case (x |> co) of b { pi -> ri }
+        ==>
+      case (x |> co) of b { pi -> ri[b |> sym co/x] }
+\end{lstlisting}
+  \begin{itemize}
+    \item Reduce number of occurrences of the scrutinee
+    \item b has unfolding information in each alternative
+  \end{itemize}
 \end{frame}
 
 \begin{frame}
@@ -727,21 +746,159 @@ data Type     = ...
   \end{itemize}
 \end{frame}
 
-\section{Further work}
-
-\begin{frame}
-  \frametitle{Todo}
+\begin{frame}[fragile]
+  \frametitle{SpecConst: specialise over constructors}
 
   \begin{itemize}
-    \item eta-reduction / eta-expansion
-    \item Demand-analysis
-    \item Binder-swap, worker-wrapper, CPR, SAT
-    \item Spec-constr
-    \item STG: CSE, constructor reuse
-    \item Cmm
-    \item Asm
+    \item Idea: specialize a function depending on arguments' constructors
   \end{itemize}
 
+  \begin{lstlisting}[language=haskell,basicstyle=\tiny]
+last :: [a] -> a
+last [] = error "last"
+last (x : []) = x
+last (x : xs) = last xs
+
+===>
+
+last [] = error "last"
+last (x:xs) = last' x xs
+  where
+    last' x [] = x
+    last' x (y:ys) = last' y ys
+  \end{lstlisting}
+
+  References:
+  \begin{itemize}
+    \item GHC.Core.Opt.SpecConst
+    \item 2007 - "Call-pattern specialisation for Haskell programs" (SPJ)
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Demand analysis / strictness analysis}
+
+  \begin{itemize}
+    \item Idea: annotate functions with the way they use their arguments
+    \item E.g. not at all, strictly, etc.
+    \item Also sub-demands for fields of datacons
+    \item Why: caller can pass arguments by value, worker-wrapper, etc.
+  \end{itemize}
+
+  References:
+  \begin{itemize}
+    \item GHC.Core.Opt.DmdAnal
+    \item 2017 - "Theory and practice of demand analysis in Haskell (draft)"
+      (SPJ et al)
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{CPR analysis}
+  \begin{itemize}
+    \item CPR: Constructed Product Result
+    \item Idea: if a function always build a result "C a b c", just return a, b,
+      and c and let the caller allocate C (if needed)
+  \end{itemize}
+
+  References:
+  \begin{itemize}
+    \item GHC.Core.Opt.CprAnal
+    \item 2004 - "Constructed Product Result analysis for Haskell" (SPJ et al)
+    \item Sebastian Graf
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Worker-wrapper}
+  \begin{itemize}
+    \item Idea: after demand analysis and CPR analysis, split functions into wrapper/worker
+    \item Wrapper
+      \begin{itemize}
+        \item evaluates and unboxes strict arguments
+        \item call worker
+        \item allocate CPR results
+      \end{itemize}
+    \item Worker
+      \begin{itemize}
+        \item Perform the useful work
+      \end{itemize}
+    \item The hope is that the wrapper get inlined to be optimized
+  \end{itemize}
+
+  References:
+  \begin{itemize}
+    \item GHC.Core.Opt.WorkWrap
+    \item previous papers about demand analysis and CPR analysis
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Call arity, eta-reduction, eta-expansion}
+  \begin{itemize}
+    \item Idea: find the "real" arity of a function
+    \item E.g. f a b = \textbackslash c $\rightarrow$ e
+      \begin{itemize}
+        \item f doesn't do any work until applied to at least 3 arguments
+      \end{itemize}
+  \end{itemize}
+
+  References:
+  \begin{itemize}
+    \item GHC.Core.Opt.CallArity
+    \item 2016 - Joachim Breitner's doctoral thesis
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{SAT: Static Argument Transformation}
+  \begin{itemize}
+    \item Idea: avoid passing always the same arg to recursive calls
+  \end{itemize}
+  \begin{lstlisting}[language=haskell,basicstyle=\tiny]
+foo f n = case n of
+  0 -> []
+  _ -> f n : foo f (n-1)
+
+===>
+
+foo f n =
+  let foo' = case n of
+            0 -> []
+            _ -> f n : foo' (n-1)
+  in foo' n
+\end{lstlisting}
+  \begin{itemize}
+    \item Side-effect: `foo` may no longer be recursive and may be inlined!
+    \item Now always allocate a closure (e.g. "foo'")
+  \end{itemize}
+
+  References:
+  \begin{itemize}
+    \item GHC.Core.Opt.StaticArgs
+    \item Santos' thesis
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Remarks on Core optimizations}
+  \begin{itemize}
+    \item Fragile because some semantic constructs are hidden
+      \begin{itemize}
+        \item As primop application: seq, keepAlive
+        \item As let-bindings: join points, unlifted/unboxed lets
+      \end{itemize}
+    \item Quite intricate
+      \begin{itemize}
+        \item Doing some misoptimization because we know there is something else
+          happening later in the pipeline to fix it
+        \item Rely on mutable state: demand-info, occur-info...
+        \item Mix optimization for performance:
+          \begin{itemize}
+            \item E.g. specialisation triggers rule rewriting
+          \end{itemize}
+      \end{itemize}
+  \end{itemize}
 \end{frame}
 
 \end{document}
