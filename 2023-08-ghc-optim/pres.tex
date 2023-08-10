@@ -691,6 +691,42 @@ data Type     = ...
   \end{itemize}
 \end{frame}
 
+\begin{frame}[fragile]
+  \frametitle{Liberate case}
+
+  \begin{itemize}
+    \item Idea: unroll (inline) a recursive function once into itself
+    \item When: when it scrutinizes a free variable before the recursive calls
+    \item Why: in the inlined code, the free variable is already evaluated,
+      split apart, etc.
+  \end{itemize}
+
+  \begin{lstlisting}[language=haskell,basicstyle=\tiny]
+   f = \ t -> case v of
+               V a b -> a : f t
+
+=> the inner f is replaced.
+
+   f = \ t -> case v of
+                 V a b -> a : (letrec
+                                f =  \ t -> case v of
+                                               V a b -> a : f t
+                               in f) t
+=> Simplify
+
+  f = \ t -> case v of
+                 V a b -> a : (letrec
+                                f = \ t -> a : f t
+                               in f t)
+\end{lstlisting}
+
+
+  References:
+  \begin{itemize}
+    \item GHC.Core.Opt.LiberateCase
+  \end{itemize}
+\end{frame}
+
 \section{Further work}
 
 \begin{frame}
@@ -698,10 +734,8 @@ data Type     = ...
 
   \begin{itemize}
     \item eta-reduction / eta-expansion
-    \item Rest of Santos' thesis (see p24)
     \item Demand-analysis
     \item Binder-swap, worker-wrapper, CPR, SAT
-    \item Unrolling (liberate-case)
     \item Spec-constr
     \item STG: CSE, constructor reuse
     \item Cmm
