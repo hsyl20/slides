@@ -167,16 +167,23 @@ data Type     = ...
         \item Full-laziness
         \item + many other passes and analyses
       \end{itemize}
+    \item Phases: initial ("gentle"), 2, 1, 0, final*
+      \begin{itemize}
+        \item Some rules and unfoldings (inlining) only enabled in some phases
+        \item Users can only specify 0-2 in pragmas
+        \item Final phase run repeatedly
+      \end{itemize}
   \end{itemize}
 
   References:
   \begin{itemize}
     \item GHC.Core.Opt.Pipeline
+    \item Note [Compiler phases] in GHC.Types.Basic
   \end{itemize}
 \end{frame}
 
 \begin{frame}
-  \frametitle{Simple optimiser: simpler pipeline}
+  \frametitle{Simple optimiser: simpler, alternative optimization pipeline}
 
   \begin{itemize}
     \item Performs:
@@ -192,7 +199,7 @@ data Type     = ...
       \end{itemize}
     \item Used to simplify statically defined unfoldings, etc.
     \item Pure function: no stats, no dumps, etc.
-    \item Do not confound with the "simplifier" (more complex, use IO)
+    \item Do not confound "simple" with "simplifier"
   \end{itemize}
 
   References:
@@ -205,12 +212,7 @@ data Type     = ...
   \frametitle{Simplifier}
   \begin{itemize}
     \item Performs a bunch of local transformations
-    \item Simplifier has 4 phases: gentle, 2, 1, 0
-      \begin{itemize}
-        \item Some rules and unfoldings (inlining) only enabled in some phases
-        \item Gentle is the "special initial phase"
-      \end{itemize}
-    \item Each phase runs several iterations of the optimization pipeline
+    \item Several simplifier iterations per phase of the optimization pipeline
       \begin{itemize}
         \item Until fixpoint or N iterations (4 by default, set with
           `-fmax-simplifier-iterations`)
@@ -225,6 +227,70 @@ data Type     = ...
       \end{itemize}
     \item 1995 - "Compilation by transformation in non-strict functional
       languages" (Santos' thesis)
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Simplifier: Santos' thesis 1/2}
+
+  \includegraphics[width=25pc]{images/santos1.png}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Simplifier: Santos' thesis 2/2}
+
+  \includegraphics[width=25pc]{images/santos2.png}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Case of known constructor}
+  \begin{itemize}
+    \item Also called "case reduction" (Santos)
+    \item case C a b of \{ ...; C x y $\rightarrow$ e ;... \} $\Longrightarrow$ e[a/x,b/y]
+    \item Also applies to variable scrutinees which we know to be bound to a
+      datacon
+      \begin{itemize}
+        \item case C a b of v \{ .. case v of ... C x y $\rightarrow$ e ...\}
+        \item let v = C a b in .. case v of ... C x y $\rightarrow$ e ...
+      \end{itemize}
+    \item Made trickier by datacon wrappers that inline late... but for which we
+      want to apply this optimization early
+      \begin{itemize}
+        \item Inline wrapper on the fly. Some wrinkles (see Notes)
+      \end{itemize}
+  \end{itemize}
+
+  References:
+  \begin{itemize}
+    \item 1995 - "Compilation by transformation in non-strict functional
+      languages" (Santos' thesis)
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Let-floating: float-in, float-out (full-laziness)}
+
+  \begin{itemize}
+    \item Float-in
+      \begin{itemize}
+        \item float let-bindings closer to their use sites
+        \item reduce allocation scope
+      \end{itemize}
+    \item Float-out (full-laziness)
+      \begin{itemize}
+        \item float let-bindings towards the top-level
+        \item allow other optimizations to fire (without lets in their way)
+        \item increase sharing: risk of space leaks
+        \item static-forms (cd StaticPointers) always floated-out to the top-level
+      \end{itemize}
+    \item Need to be careful with sharing, laziness, work duplication...
+  \end{itemize}
+
+  References:
+  \begin{itemize}
+    \item GHC.Core.Opt.\{FloatIn,FloatOut\}
+    \item 1997 - "A transformation-based optimiser for Haskell" (SPJ, Santos)
+    \item 2011 - (static pointers) "Towards Haskell in the Cloud" (SPJ et al)
   \end{itemize}
 \end{frame}
 
@@ -418,31 +484,6 @@ data Type     = ...
 
 \end{frame}
 
-
-\begin{frame}
-  \frametitle{Case of known constructor}
-  \begin{itemize}
-    \item Also called "case reduction" (Santos)
-    \item case C a b of ... C x y $\rightarrow$ e ... $\Longrightarrow$ e[a/x,b/y]
-    \item Also applies to variable scrutinees which we know to be bound to a
-      datacon
-      \begin{itemize}
-        \item case C a b of v \{ .. case v of ... C x y $\rightarrow$ e ...\}
-        \item let v = C a b in .. case v of ... C x y $\rightarrow$ e ...
-      \end{itemize}
-    \item Made trickier by datacon wrappers that inline late... but for which we
-      want to apply this optimization early
-      \begin{itemize}
-        \item Inline wrapper on the fly. Some wrinkles (see Notes)
-      \end{itemize}
-  \end{itemize}
-
-  References:
-  \begin{itemize}
-    \item 1995 - "Compilation by transformation in non-strict functional
-      languages" (Santos' thesis)
-  \end{itemize}
-\end{frame}
 
 \begin{frame}
   \frametitle{Coercion optimization}
@@ -660,7 +701,6 @@ data Type     = ...
     \item Rest of Santos' thesis (see p24)
     \item Demand-analysis
     \item Binder-swap, worker-wrapper, CPR, SAT
-    \item Float-in, float-out, full-laziness
     \item Unrolling (liberate-case)
     \item Spec-constr
     \item STG: CSE, constructor reuse
